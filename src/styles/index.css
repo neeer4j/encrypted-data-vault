@@ -74,4 +74,32 @@ body {
     border: 1px solid #9a9a9a;
     color: #111318;
   }
+
+  .context-menu {
+    position: absolute;
+    z-index: 40;
+    min-width: 180px;
+    background: #f2f2f2;
+    border: 2px solid #111318;
+    box-shadow: 2px 2px 0 #3b3b3b;
+    padding: 6px;
+  }
+
+  .context-menu button {
+    width: 100%;
+    text-align: left;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .context-menu button:hover {
+    background: #0b3b91;
+    color: #ffffff;
+  }
+
+  .context-separator {
+    height: 1px;
+    background: #9a9a9a;
+    margin: 6px 0;
+  }
 }

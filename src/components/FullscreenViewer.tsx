@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import type { VaultItem } from "../lib/types";
 
@@ -8,6 +9,17 @@ interface FullscreenViewerProps {
 }
 
 export function FullscreenViewer({ item, data, onClose }: FullscreenViewerProps) {
+  const noteText = useMemo(() => {
+    if (!data || item.kind !== "note") return "";
+    try {
+      const binary = atob(data);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return "";
+    }
+  }, [data, item.kind]);
+
   return (
     <div className="fixed inset-0 z-50 bg-[#2c3b52]/80 flex items-center justify-center p-8">
       <motion.div
@@ -37,6 +49,12 @@ export function FullscreenViewer({ item, data, onClose }: FullscreenViewerProps)
               controls
               className="max-w-full max-h-full"
             />
+          )}
+          {data && item.kind === "note" && (
+            <div className="w-full h-full overflow-auto p-4">
+              <h3 className="font-semibold mb-3">{item.filename}</h3>
+              <pre className="text-sm whitespace-pre-wrap">{noteText || "Unable to render note."}</pre>
+            </div>
           )}
           {data && item.kind === "document" && (
             <p className="text-ink-600">Document preview not available yet.</p>
