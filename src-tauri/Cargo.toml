@@ -1,0 +1,24 @@
+[package]
+name = "personal-data-vault"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0" }
+
+[dependencies]
+tauri = { version = "2.0.0" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.8"
+argon2 = "0.5"
+zeroize = "1.7"
+sodiumoxide = "0.2"
+rusqlite = { version = "0.31", features = ["bundled"] }
+base64 = "0.22"
+uuid = { version = "1.8", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
