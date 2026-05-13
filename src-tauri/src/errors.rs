@@ -22,8 +22,10 @@ pub enum VaultError {
     Io(#[from] std::io::Error),
     #[error("serde error")]
     Serde(#[from] serde_json::Error),
-    #[error("argon2 error")]
-    Argon2(#[from] argon2::password_hash::Error),
+    #[error("argon2 error: {0}")]
+    Argon2(String),
+    #[error("argon2 params error: {0}")]
+    Argon2Params(String),
     #[error("sqlite error")]
     Sqlite(#[from] rusqlite::Error),
     #[error("base64 error")]

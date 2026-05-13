@@ -1,15 +1,15 @@
 {
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "Personal Data Vault",
+  "version": "0.1.0",
+  "identifier": "com.local.personal-data-vault",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:5173",
-    "distDir": "../dist"
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
   },
-  "package": {
-    "productName": "Personal Data Vault",
-    "version": "0.1.0"
-  },
-  "tauri": {
+  "app": {
     "windows": [
       {
         "title": "Personal Data Vault",
@@ -17,12 +17,11 @@
         "height": 800,
         "resizable": true
       }
-    ],
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.local.personal-data-vault",
-      "icon": []
-    }
+    ]
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": []
   }
 }

@@ -10,11 +10,11 @@ use crate::db::{
     delete_item,
     get_item,
     insert_item,
-    list_folders,
-    list_items,
+    list_folders as db_list_folders,
+    list_items as db_list_items,
     now_iso,
-    set_folder_hidden,
-    set_folder_locked,
+    set_folder_hidden as db_set_folder_hidden,
+    set_folder_locked as db_set_folder_locked,
     upsert_folder
 };
 use crate::errors::VaultError;
@@ -25,7 +25,14 @@ use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use std::fs;
 use std::io::{Seek, SeekFrom, Write};
+use tauri::Manager;
 use uuid::Uuid;
+
+type CommandResult<T> = Result<T, String>;
+
+fn to_invoke_error<E: std::fmt::Display>(error: E) -> String {
+    error.to_string()
+}
 
 #[tauri::command]
 fn create_vault(
@@ -33,20 +40,21 @@ fn create_vault(
     vault_id: String,
     password: String,
     idle_timeout: u64
-) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    ensure_vault_dirs(&paths)?;
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    ensure_vault_dirs(&paths).map_err(to_invoke_error)?;
     let salt = random_salt();
-    create_vault_config(&paths, &password, &salt)?;
-    ensure_db(&paths)?;
+    create_vault_config(&paths, &password, &salt).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
     let default_folder = VaultFolder {
         name: "Notes".to_string(),
         hidden: false,
         locked: false
     };
-    upsert_folder(&paths.db_path, &default_folder)?;
-    let mut session = app.state::<AppState>().session.lock().unwrap();
-    let key = derive_key(&password, &salt)?;
+    upsert_folder(&paths.db_path, &default_folder).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let mut session = state.session.lock().unwrap();
+    let key = derive_key(&password, &salt).map_err(to_invoke_error)?;
     *session = Some(SessionState {
         vault_id,
         key,
@@ -62,20 +70,21 @@ fn unlock_vault(
     vault_id: String,
     password: String,
     idle_timeout: u64
-) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    let config = load_vault_config(&paths)?;
-    verify_vault_password(&config, &password)?;
-    let salt = parse_salt(&config)?;
-    let key = derive_key(&password, &salt)?;
-    ensure_db(&paths)?;
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let config = load_vault_config(&paths).map_err(to_invoke_error)?;
+    verify_vault_password(&config, &password).map_err(to_invoke_error)?;
+    let salt = parse_salt(&config).map_err(to_invoke_error)?;
+    let key = derive_key(&password, &salt).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
     let default_folder = VaultFolder {
         name: "Notes".to_string(),
         hidden: false,
         locked: false
     };
-    upsert_folder(&paths.db_path, &default_folder)?;
-    let mut session = app.state::<AppState>().session.lock().unwrap();
+    upsert_folder(&paths.db_path, &default_folder).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let mut session = state.session.lock().unwrap();
     *session = Some(SessionState {
         vault_id,
         key,
@@ -86,8 +95,9 @@ fn unlock_vault(
 }
 
 #[tauri::command]
-fn lock_vault(app: tauri::AppHandle) -> Result<(), VaultError> {
-    let mut session = app.state::<AppState>().session.lock().unwrap();
+fn lock_vault(app: tauri::AppHandle) -> CommandResult<()> {
+    let state = app.state::<AppState>();
+    let mut session = state.session.lock().unwrap();
     if let Some(mut state) = session.take() {
         state.clear();
     }
@@ -95,14 +105,16 @@ fn lock_vault(app: tauri::AppHandle) -> Result<(), VaultError> {
 }
 
 #[tauri::command]
-fn is_unlocked(app: tauri::AppHandle) -> Result<bool, VaultError> {
-    let session = app.state::<AppState>().session.lock().unwrap();
+fn is_unlocked(app: tauri::AppHandle) -> CommandResult<bool> {
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
     Ok(session.is_some())
 }
 
 #[tauri::command]
-fn touch_activity(app: tauri::AppHandle) -> Result<(), VaultError> {
-    let mut session = app.state::<AppState>().session.lock().unwrap();
+fn touch_activity(app: tauri::AppHandle) -> CommandResult<()> {
+    let state = app.state::<AppState>();
+    let mut session = state.session.lock().unwrap();
     if let Some(state) = session.as_mut() {
         state.touch();
     }
@@ -110,8 +122,9 @@ fn touch_activity(app: tauri::AppHandle) -> Result<(), VaultError> {
 }
 
 #[tauri::command]
-fn check_autolock(app: tauri::AppHandle) -> Result<bool, VaultError> {
-    let mut session = app.state::<AppState>().session.lock().unwrap();
+fn check_autolock(app: tauri::AppHandle) -> CommandResult<bool> {
+    let state = app.state::<AppState>();
+    let mut session = state.session.lock().unwrap();
     if let Some(state) = session.as_mut() {
         if state.should_lock() {
             state.clear();
@@ -133,23 +146,24 @@ fn encrypt_and_store(
     folder: Option<String>,
     favorite: bool,
     data_base64: String
-) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    ensure_vault_dirs(&paths)?;
-    ensure_db(&paths)?;
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    ensure_vault_dirs(&paths).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
 
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
 
-    let plaintext = general_purpose::STANDARD.decode(data_base64)?;
-    let encrypted = encrypt_bytes(&state.key, &plaintext)?;
+    let plaintext = general_purpose::STANDARD.decode(data_base64).map_err(to_invoke_error)?;
+    let encrypted = encrypt_bytes(&state.key, &plaintext).map_err(to_invoke_error)?;
     let id = Uuid::new_v4().to_string();
     let file_name = format!("{}.enc", id);
     let encrypted_path = paths.storage_dir.join(file_name);
-    fs::write(&encrypted_path, encrypted)?;
+    fs::write(&encrypted_path, encrypted).map_err(to_invoke_error)?;
 
     let now = now_iso();
     let item = VaultItem {
@@ -164,31 +178,33 @@ fn encrypt_and_store(
         updated_at: now,
         encrypted_path: encrypted_path.to_string_lossy().to_string()
     };
-    insert_item(&paths.db_path, &item)?;
+    insert_item(&paths.db_path, &item).map_err(to_invoke_error)?;
     Ok(())
 }
 
 #[tauri::command]
-fn list_items(app: tauri::AppHandle, vault_id: String) -> Result<Vec<VaultItem>, VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+fn list_items(app: tauri::AppHandle, vault_id: String) -> CommandResult<Vec<VaultItem>> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    list_items(&paths.db_path)
+    db_list_items(&paths.db_path).map_err(to_invoke_error)
 }
 
 #[tauri::command]
-fn list_folders(app: tauri::AppHandle, vault_id: String) -> Result<Vec<VaultFolder>, VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    ensure_db(&paths)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+fn list_folders(app: tauri::AppHandle, vault_id: String) -> CommandResult<Vec<VaultFolder>> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    list_folders(&paths.db_path)
+    db_list_folders(&paths.db_path).map_err(to_invoke_error)
 }
 
 #[tauri::command]
@@ -198,16 +214,17 @@ fn create_folder(
     name: String,
     hidden: bool,
     locked: bool
-) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    ensure_db(&paths)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
     let folder = VaultFolder { name, hidden, locked };
-    upsert_folder(&paths.db_path, &folder)?;
+    upsert_folder(&paths.db_path, &folder).map_err(to_invoke_error)?;
     Ok(())
 }
 
@@ -217,15 +234,16 @@ fn set_folder_hidden(
     vault_id: String,
     name: String,
     hidden: bool
-) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    ensure_db(&paths)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    set_folder_hidden(&paths.db_path, &name, hidden)?;
+    db_set_folder_hidden(&paths.db_path, &name, hidden).map_err(to_invoke_error)?;
     Ok(())
 }
 
@@ -235,15 +253,16 @@ fn set_folder_locked(
     vault_id: String,
     name: String,
     locked: bool
-) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    ensure_db(&paths)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    ensure_db(&paths).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    set_folder_locked(&paths.db_path, &name, locked)?;
+    db_set_folder_locked(&paths.db_path, &name, locked).map_err(to_invoke_error)?;
     Ok(())
 }
 
@@ -253,34 +272,36 @@ fn unlock_folder(
     vault_id: String,
     _name: String,
     password: String
-) -> Result<bool, VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+) -> CommandResult<bool> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    let config = load_vault_config(&paths)?;
+    let config = load_vault_config(&paths).map_err(to_invoke_error)?;
     Ok(verify_vault_password(&config, &password).is_ok())
 }
 
 #[tauri::command]
-fn search_items(app: tauri::AppHandle, vault_id: String, query: String) -> Result<Vec<VaultItem>, VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+fn search_items(app: tauri::AppHandle, vault_id: String, query: String) -> CommandResult<Vec<VaultItem>> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
     let query = query.to_lowercase();
-    let all_items = list_items(&paths.db_path)?;
+    let all_items = db_list_items(&paths.db_path).map_err(to_invoke_error)?;
     let mut matches = Vec::new();
     for item in all_items {
         let mut matched = item.filename.to_lowercase().contains(&query)
             || item.tags.iter().any(|tag| tag.to_lowercase().contains(&query));
         if !matched && item.kind == "note" {
-            let data = fs::read(&item.encrypted_path)?;
-            let plaintext = decrypt_bytes(&state.key, &data)?;
+            let data = fs::read(&item.encrypted_path).map_err(to_invoke_error)?;
+            let plaintext = decrypt_bytes(&state.key, &data).map_err(to_invoke_error)?;
             if let Ok(text) = String::from_utf8(plaintext) {
                 matched = text.to_lowercase().contains(&query);
             }
@@ -293,16 +314,17 @@ fn search_items(app: tauri::AppHandle, vault_id: String, query: String) -> Resul
 }
 
 #[tauri::command]
-fn decrypt_preview(app: tauri::AppHandle, vault_id: String, item_id: String) -> Result<String, VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+fn decrypt_preview(app: tauri::AppHandle, vault_id: String, item_id: String) -> CommandResult<String> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    let item = get_item(&paths.db_path, &item_id)?;
-    let data = fs::read(item.encrypted_path)?;
-    let plaintext = decrypt_bytes(&state.key, &data)?;
+    let item = get_item(&paths.db_path, &item_id).map_err(to_invoke_error)?;
+    let data = fs::read(item.encrypted_path).map_err(to_invoke_error)?;
+    let plaintext = decrypt_bytes(&state.key, &data).map_err(to_invoke_error)?;
     Ok(general_purpose::STANDARD.encode(plaintext))
 }
 
@@ -327,17 +349,18 @@ fn secure_delete_file(path: &std::path::Path) -> Result<(), VaultError> {
 }
 
 #[tauri::command]
-fn secure_delete_item(app: tauri::AppHandle, vault_id: String, item_id: String) -> Result<(), VaultError> {
-    let paths = vault_paths(&app, &vault_id)?;
-    let session = app.state::<AppState>().session.lock().unwrap();
-    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+fn secure_delete_item(app: tauri::AppHandle, vault_id: String, item_id: String) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
     if state.vault_id != vault_id {
-        return Err(VaultError::VaultMismatch);
+        return Err(VaultError::VaultMismatch.to_string());
     }
-    let item = get_item(&paths.db_path, &item_id)?;
+    let item = get_item(&paths.db_path, &item_id).map_err(to_invoke_error)?;
     let encrypted_path = std::path::Path::new(&item.encrypted_path);
-    secure_delete_file(encrypted_path)?;
-    delete_item(&paths.db_path, &item_id)?;
+    secure_delete_file(encrypted_path).map_err(to_invoke_error)?;
+    delete_item(&paths.db_path, &item_id).map_err(to_invoke_error)?;
     Ok(())
 }
 

@@ -24,7 +24,7 @@ pub fn vault_paths(app: &tauri::AppHandle, vault_id: &str) -> Result<VaultPaths,
     let base = app
         .path()
         .app_data_dir()
-        .ok_or(VaultError::PathUnavailable)?
+        .map_err(|_| VaultError::PathUnavailable)?
         .join("vaults")
         .join(vault_id);
 

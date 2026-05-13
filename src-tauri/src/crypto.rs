@@ -18,23 +18,32 @@ pub fn init_crypto() -> Result<(), VaultError> {
 
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, VaultError> {
     let mut key = vec![0u8; xchacha::KEYBYTES];
-    let params = Params::new(65536, 3, 1, Some(xchacha::KEYBYTES as u32))?;
+    let params = Params::new(65536, 3, 1, Some(xchacha::KEYBYTES))
+        .map_err(|err| VaultError::Argon2Params(err.to_string()))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    argon2.hash_password_into(password.as_bytes(), salt, &mut key)?;
+    argon2
+        .hash_password_into(password.as_bytes(), salt, &mut key)
+        .map_err(|err| VaultError::Argon2Params(err.to_string()))?;
     Ok(key)
 }
 
 pub fn hash_password(password: &str, salt: &[u8]) -> Result<String, VaultError> {
-    let salt_string = SaltString::b64_encode(salt)?;
-    let params = Params::new(65536, 3, 1, None)?;
+    let salt_string = SaltString::encode_b64(salt)
+        .map_err(|err| VaultError::Argon2(err.to_string()))?;
+    let params = Params::new(65536, 3, 1, None)
+        .map_err(|err| VaultError::Argon2Params(err.to_string()))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let hash = argon2.hash_password(password.as_bytes(), &salt_string)?;
+    let hash = argon2
+        .hash_password(password.as_bytes(), &salt_string)
+        .map_err(|err| VaultError::Argon2(err.to_string()))?;
     Ok(hash.to_string())
 }
 
 pub fn verify_password(password: &str, verifier_hash: &str) -> Result<bool, VaultError> {
-    let parsed = PasswordHash::new(verifier_hash)?;
-    let params = Params::new(65536, 3, 1, None)?;
+    let parsed = PasswordHash::new(verifier_hash)
+        .map_err(|err| VaultError::Argon2(err.to_string()))?;
+    let params = Params::new(65536, 3, 1, None)
+        .map_err(|err| VaultError::Argon2Params(err.to_string()))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     Ok(argon2.verify_password(password.as_bytes(), &parsed).is_ok())
 }
