@@ -13,3 +13,10 @@ pub struct VaultItem {
     pub updated_at: String,
     pub encrypted_path: String
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultFolder {
+    pub name: String,
+    pub hidden: bool,
+    pub locked: bool
+}

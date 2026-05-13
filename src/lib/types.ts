@@ -18,3 +18,9 @@ export interface VaultStatus {
   unlocked: boolean;
   vaultId: string | null;
 }
+
+export interface VaultFolder {
+  name: string;
+  hidden: boolean;
+  locked: boolean;
+}

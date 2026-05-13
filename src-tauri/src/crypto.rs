@@ -1,5 +1,8 @@
 use crate::errors::VaultError;
-use argon2::{password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString}, Argon2};
+use argon2::{
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Algorithm, Argon2, Params, Version
+};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as xchacha;
@@ -15,20 +18,24 @@ pub fn init_crypto() -> Result<(), VaultError> {
 
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, VaultError> {
     let mut key = vec![0u8; xchacha::KEYBYTES];
-    Argon2::default().hash_password_into(password.as_bytes(), salt, &mut key)?;
+    let params = Params::new(65536, 3, 1, Some(xchacha::KEYBYTES as u32))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    argon2.hash_password_into(password.as_bytes(), salt, &mut key)?;
     Ok(key)
 }
 
 pub fn hash_password(password: &str, salt: &[u8]) -> Result<String, VaultError> {
     let salt_string = SaltString::b64_encode(salt)?;
-    let argon2 = Argon2::default();
+    let params = Params::new(65536, 3, 1, None)?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let hash = argon2.hash_password(password.as_bytes(), &salt_string)?;
     Ok(hash.to_string())
 }
 
 pub fn verify_password(password: &str, verifier_hash: &str) -> Result<bool, VaultError> {
     let parsed = PasswordHash::new(verifier_hash)?;
-    let argon2 = Argon2::default();
+    let params = Params::new(65536, 3, 1, None)?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     Ok(argon2.verify_password(password.as_bytes(), &parsed).is_ok())
 }
 

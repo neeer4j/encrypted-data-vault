@@ -6,14 +6,25 @@ mod state;
 mod vault;
 
 use crate::crypto::{decrypt_bytes, derive_key, encrypt_bytes, random_salt};
-use crate::db::{get_item, insert_item, list_items, now_iso};
+use crate::db::{
+    delete_item,
+    get_item,
+    insert_item,
+    list_folders,
+    list_items,
+    now_iso,
+    set_folder_hidden,
+    set_folder_locked,
+    upsert_folder
+};
 use crate::errors::VaultError;
-use crate::models::VaultItem;
+use crate::models::{VaultFolder, VaultItem};
 use crate::state::{AppState, SessionState};
 use crate::vault::{create_vault_config, ensure_db, ensure_vault_dirs, load_vault_config, parse_salt, verify_vault_password, vault_paths};
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use std::fs;
+use std::io::{Seek, SeekFrom, Write};
 use uuid::Uuid;
 
 #[tauri::command]
@@ -28,6 +39,12 @@ fn create_vault(
     let salt = random_salt();
     create_vault_config(&paths, &password, &salt)?;
     ensure_db(&paths)?;
+    let default_folder = VaultFolder {
+        name: "Notes".to_string(),
+        hidden: false,
+        locked: false
+    };
+    upsert_folder(&paths.db_path, &default_folder)?;
     let mut session = app.state::<AppState>().session.lock().unwrap();
     let key = derive_key(&password, &salt)?;
     *session = Some(SessionState {
@@ -51,6 +68,13 @@ fn unlock_vault(
     verify_vault_password(&config, &password)?;
     let salt = parse_salt(&config)?;
     let key = derive_key(&password, &salt)?;
+    ensure_db(&paths)?;
+    let default_folder = VaultFolder {
+        name: "Notes".to_string(),
+        hidden: false,
+        locked: false
+    };
+    upsert_folder(&paths.db_path, &default_folder)?;
     let mut session = app.state::<AppState>().session.lock().unwrap();
     *session = Some(SessionState {
         vault_id,
@@ -156,6 +180,91 @@ fn list_items(app: tauri::AppHandle, vault_id: String) -> Result<Vec<VaultItem>,
 }
 
 #[tauri::command]
+fn list_folders(app: tauri::AppHandle, vault_id: String) -> Result<Vec<VaultFolder>, VaultError> {
+    let paths = vault_paths(&app, &vault_id)?;
+    ensure_db(&paths)?;
+    let session = app.state::<AppState>().session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch);
+    }
+    list_folders(&paths.db_path)
+}
+
+#[tauri::command]
+fn create_folder(
+    app: tauri::AppHandle,
+    vault_id: String,
+    name: String,
+    hidden: bool,
+    locked: bool
+) -> Result<(), VaultError> {
+    let paths = vault_paths(&app, &vault_id)?;
+    ensure_db(&paths)?;
+    let session = app.state::<AppState>().session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch);
+    }
+    let folder = VaultFolder { name, hidden, locked };
+    upsert_folder(&paths.db_path, &folder)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_folder_hidden(
+    app: tauri::AppHandle,
+    vault_id: String,
+    name: String,
+    hidden: bool
+) -> Result<(), VaultError> {
+    let paths = vault_paths(&app, &vault_id)?;
+    ensure_db(&paths)?;
+    let session = app.state::<AppState>().session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch);
+    }
+    set_folder_hidden(&paths.db_path, &name, hidden)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_folder_locked(
+    app: tauri::AppHandle,
+    vault_id: String,
+    name: String,
+    locked: bool
+) -> Result<(), VaultError> {
+    let paths = vault_paths(&app, &vault_id)?;
+    ensure_db(&paths)?;
+    let session = app.state::<AppState>().session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch);
+    }
+    set_folder_locked(&paths.db_path, &name, locked)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn unlock_folder(
+    app: tauri::AppHandle,
+    vault_id: String,
+    _name: String,
+    password: String
+) -> Result<bool, VaultError> {
+    let paths = vault_paths(&app, &vault_id)?;
+    let session = app.state::<AppState>().session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch);
+    }
+    let config = load_vault_config(&paths)?;
+    Ok(verify_vault_password(&config, &password).is_ok())
+}
+
+#[tauri::command]
 fn search_items(app: tauri::AppHandle, vault_id: String, query: String) -> Result<Vec<VaultItem>, VaultError> {
     let paths = vault_paths(&app, &vault_id)?;
     let session = app.state::<AppState>().session.lock().unwrap();
@@ -197,6 +306,41 @@ fn decrypt_preview(app: tauri::AppHandle, vault_id: String, item_id: String) -> 
     Ok(general_purpose::STANDARD.encode(plaintext))
 }
 
+fn secure_delete_file(path: &std::path::Path) -> Result<(), VaultError> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let size = fs::metadata(path)?.len();
+    let mut file = fs::OpenOptions::new().write(true).open(path)?;
+    file.seek(SeekFrom::Start(0))?;
+    let buffer = vec![0u8; 8192];
+    let mut remaining = size;
+    while remaining > 0 {
+        let chunk = std::cmp::min(remaining, buffer.len() as u64) as usize;
+        file.write_all(&buffer[..chunk])?;
+        remaining -= chunk as u64;
+    }
+    file.sync_all()?;
+    drop(file);
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn secure_delete_item(app: tauri::AppHandle, vault_id: String, item_id: String) -> Result<(), VaultError> {
+    let paths = vault_paths(&app, &vault_id)?;
+    let session = app.state::<AppState>().session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch);
+    }
+    let item = get_item(&paths.db_path, &item_id)?;
+    let encrypted_path = std::path::Path::new(&item.encrypted_path);
+    secure_delete_file(encrypted_path)?;
+    delete_item(&paths.db_path, &item_id)?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(AppState { session: std::sync::Mutex::new(None) })
@@ -209,8 +353,14 @@ fn main() {
             check_autolock,
             encrypt_and_store,
             list_items,
+            list_folders,
+            create_folder,
+            set_folder_hidden,
+            set_folder_locked,
+            unlock_folder,
             search_items,
-            decrypt_preview
+            decrypt_preview,
+            secure_delete_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

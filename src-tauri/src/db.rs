@@ -1,5 +1,5 @@
 use crate::errors::VaultError;
-use crate::models::VaultItem;
+use crate::models::{VaultFolder, VaultItem};
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -24,6 +24,13 @@ pub fn init_db(path: &Path) -> Result<(), VaultError> {
         CREATE INDEX IF NOT EXISTS idx_items_folder ON items(folder);
         CREATE INDEX IF NOT EXISTS idx_items_favorite ON items(favorite);
         CREATE INDEX IF NOT EXISTS idx_items_created ON items(created_at);
+        CREATE TABLE IF NOT EXISTS folders (
+            name TEXT PRIMARY KEY,
+            hidden INTEGER NOT NULL,
+            locked INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_folders_hidden ON folders(hidden);
+        CREATE INDEX IF NOT EXISTS idx_folders_locked ON folders(locked);
         "
     )?;
     Ok(())
@@ -100,6 +107,60 @@ pub fn get_item(path: &Path, item_id: &str) -> Result<VaultItem, VaultError> {
         })
     })?;
     Ok(item)
+}
+
+pub fn delete_item(path: &Path, item_id: &str) -> Result<(), VaultError> {
+    let conn = Connection::open(path)?;
+    conn.execute("DELETE FROM items WHERE id = ?1", params![item_id])?;
+    Ok(())
+}
+
+pub fn list_folders(path: &Path) -> Result<Vec<VaultFolder>, VaultError> {
+    let conn = Connection::open(path)?;
+    let mut stmt = conn.prepare(
+        "SELECT name, hidden, locked FROM folders ORDER BY name ASC"
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(VaultFolder {
+            name: row.get(0)?,
+            hidden: row.get::<_, i32>(1)? != 0,
+            locked: row.get::<_, i32>(2)? != 0
+        })
+    })?;
+    let mut folders = Vec::new();
+    for row in rows {
+        folders.push(row?);
+    }
+    Ok(folders)
+}
+
+pub fn upsert_folder(path: &Path, folder: &VaultFolder) -> Result<(), VaultError> {
+    let conn = Connection::open(path)?;
+    conn.execute(
+        "INSERT INTO folders (name, hidden, locked)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(name) DO UPDATE SET hidden = excluded.hidden, locked = excluded.locked",
+        params![folder.name, folder.hidden as i32, folder.locked as i32]
+    )?;
+    Ok(())
+}
+
+pub fn set_folder_hidden(path: &Path, name: &str, hidden: bool) -> Result<(), VaultError> {
+    let conn = Connection::open(path)?;
+    conn.execute(
+        "UPDATE folders SET hidden = ?1 WHERE name = ?2",
+        params![hidden as i32, name]
+    )?;
+    Ok(())
+}
+
+pub fn set_folder_locked(path: &Path, name: &str, locked: bool) -> Result<(), VaultError> {
+    let conn = Connection::open(path)?;
+    conn.execute(
+        "UPDATE folders SET locked = ?1 WHERE name = ?2",
+        params![locked as i32, name]
+    )?;
+    Ok(())
 }
 
 pub fn now_iso() -> String {

@@ -12,7 +12,7 @@ Private, offline-first encrypted vault for files and notes. Everything is encryp
 
 ## Setup
 1. Install Node.js (LTS) and Rust.
-2. Install Tauri CLI with Cargo.
+2. Install Tauri CLI with Cargo: `cargo install tauri-cli`.
 3. Install dependencies: `npm install`.
 4. Run the app: `npm run tauri dev`.
 
@@ -24,12 +24,15 @@ Private, offline-first encrypted vault for files and notes. Everything is encryp
 - Metadata lives in a SQLite database in the same vault directory.
 - Passwords are never stored. Only an Argon2id verifier is persisted.
 - Vault auto-lock is enforced after inactivity.
+- Hidden folders stay off the UI unless explicitly shown.
+- Locked folders require re-authentication per session.
 
 ## Security
 - Uses Argon2id for password key derivation.
 - Uses XChaCha20-Poly1305 for authenticated encryption.
 - Generates a unique nonce per encrypted file.
 - Securely clears in-memory session keys on lock.
+- Secure delete is best-effort and may not guarantee erasure on SSDs.
 
 ## Project layout
 - `src` contains the React UI
@@ -39,8 +42,10 @@ Private, offline-first encrypted vault for files and notes. Everything is encryp
 - Unlock to access the dashboard.
 - Drag and drop files into the vault area to encrypt and store.
 - Notes are stored encrypted like other items.
+- Use folders to group files, and lock them for extra protection.
+- Click a media card to open a fullscreen preview.
 
 ## Next steps
 - Implement encrypted search index for full-text note search.
-- Add backup/export and secure delete workflows.
+- Add backup/export workflows.
 - Add video transcoding previews.

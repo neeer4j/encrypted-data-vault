@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { VaultItem, VaultItemKind } from "./types";
+import type { VaultFolder, VaultItem, VaultItemKind } from "./types";
 
 export async function createVault(vaultId: string, password: string, idleTimeout: number) {
   return invoke<void>("create_vault", { vaultId, password, idleTimeout });
@@ -29,12 +29,41 @@ export async function listItems(vaultId: string) {
   return invoke<VaultItem[]>("list_items", { vaultId });
 }
 
+export async function listFolders(vaultId: string) {
+  return invoke<VaultFolder[]>("list_folders", { vaultId });
+}
+
+export async function createFolder(
+  vaultId: string,
+  name: string,
+  hidden: boolean,
+  locked: boolean
+) {
+  return invoke<void>("create_folder", { vaultId, name, hidden, locked });
+}
+
+export async function setFolderHidden(vaultId: string, name: string, hidden: boolean) {
+  return invoke<void>("set_folder_hidden", { vaultId, name, hidden });
+}
+
+export async function setFolderLocked(vaultId: string, name: string, locked: boolean) {
+  return invoke<void>("set_folder_locked", { vaultId, name, locked });
+}
+
+export async function unlockFolder(vaultId: string, name: string, password: string) {
+  return invoke<boolean>("unlock_folder", { vaultId, name, password });
+}
+
 export async function searchItems(vaultId: string, query: string) {
   return invoke<VaultItem[]>("search_items", { vaultId, query });
 }
 
 export async function decryptPreview(vaultId: string, itemId: string) {
   return invoke<string>("decrypt_preview", { vaultId, itemId });
+}
+
+export async function secureDeleteItem(vaultId: string, itemId: string) {
+  return invoke<void>("secure_delete_item", { vaultId, itemId });
 }
 
 export async function encryptAndStore(params: {
