@@ -21,11 +21,13 @@ export function Sidebar({
   unlockedFolders,
   onSelectFolder
 }: SidebarProps) {
+  const orderedFolders = [...folders].sort((a, b) => a.name.localeCompare(b.name));
+
   return (
-    <aside className="glass-panel rounded-2xl p-6 h-full flex flex-col gap-8">
-      <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-ink-300">Personal Data Vault</p>
-        <h1 className="text-2xl font-semibold mt-2">Vault</h1>
+    <aside className="glass-panel p-4 h-full flex flex-col gap-4">
+      <div className="retro-titlebar">Personal Data Vault</div>
+      <div className="px-1">
+        <h1 className="text-lg font-semibold">Vault</h1>
       </div>
       <nav className="flex flex-col gap-3">
         {NAV_ITEMS.map((item) => (
@@ -33,10 +35,10 @@ export function Sidebar({
             key={item.id}
             onClick={() => onSelect(item.id)}
             className={clsx(
-              "text-left px-4 py-3 rounded-xl transition",
+              "text-left px-3 py-2 text-sm retro-button",
               active === item.id
-                ? "bg-glass-100 text-white shadow-glow"
-                : "text-ink-200 hover:bg-glass-300"
+                ? "outline outline-2 outline-black"
+                : ""
             )}
           >
             {item.label}
@@ -44,34 +46,23 @@ export function Sidebar({
         ))}
       </nav>
       <div className="flex-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-ink-300 mb-3">Folders</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-ink-600 mb-3">Folders</p>
         <div className="flex flex-col gap-2">
-          <button
-            onClick={() => onSelectFolder(null)}
-            className={clsx(
-              "text-left px-4 py-2 rounded-xl text-sm transition",
-              activeFolder === null
-                ? "bg-glass-100 text-white"
-                : "text-ink-200 hover:bg-glass-300"
-            )}
-          >
-            All files
-          </button>
-          {folders.map((folder) => {
+          {orderedFolders.map((folder) => {
             const locked = folder.locked && !unlockedFolders.includes(folder.name);
             return (
               <button
                 key={folder.name}
                 onClick={() => onSelectFolder(folder.name)}
                 className={clsx(
-                  "text-left px-4 py-2 rounded-xl text-sm transition flex items-center justify-between",
+                  "text-left px-3 py-2 text-sm retro-button flex items-center justify-between",
                   activeFolder === folder.name
-                    ? "bg-glass-100 text-white"
-                    : "text-ink-200 hover:bg-glass-300"
+                    ? "outline outline-2 outline-black"
+                    : ""
                 )}
               >
                 <span className="truncate">{folder.name}</span>
-                {locked ? <span className="text-xs text-ink-400">Locked</span> : null}
+                {locked ? <span className="text-xs text-ink-600">Locked</span> : null}
               </button>
             );
           })}
@@ -79,7 +70,7 @@ export function Sidebar({
       </div>
       <button
         onClick={onLock}
-        className="text-left px-4 py-3 rounded-xl border border-white/10 text-ink-100 hover:bg-white/10 transition"
+        className="text-left px-3 py-2 retro-button text-sm"
       >
         Lock vault
       </button>

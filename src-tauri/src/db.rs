@@ -115,6 +115,26 @@ pub fn delete_item(path: &Path, item_id: &str) -> Result<(), VaultError> {
     Ok(())
 }
 
+pub fn update_item_folder(path: &Path, item_id: &str, folder: Option<String>) -> Result<(), VaultError> {
+    let conn = Connection::open(path)?;
+    let updated_at = now_iso();
+    conn.execute(
+        "UPDATE items SET folder = ?1, updated_at = ?2 WHERE id = ?3",
+        params![folder, updated_at, item_id]
+    )?;
+    Ok(())
+}
+
+pub fn update_item_name(path: &Path, item_id: &str, filename: &str) -> Result<(), VaultError> {
+    let conn = Connection::open(path)?;
+    let updated_at = now_iso();
+    conn.execute(
+        "UPDATE items SET filename = ?1, updated_at = ?2 WHERE id = ?3",
+        params![filename, updated_at, item_id]
+    )?;
+    Ok(())
+}
+
 pub fn list_folders(path: &Path) -> Result<Vec<VaultFolder>, VaultError> {
     let conn = Connection::open(path)?;
     let mut stmt = conn.prepare(

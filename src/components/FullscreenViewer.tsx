@@ -9,26 +9,21 @@ interface FullscreenViewerProps {
 
 export function FullscreenViewer({ item, data, onClose }: FullscreenViewerProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-ink-900/90 backdrop-blur-sm flex items-center justify-center p-8">
+    <div className="fixed inset-0 z-50 bg-[#2c3b52]/80 flex items-center justify-center p-8">
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="glass-panel rounded-2xl w-full h-full p-6 flex flex-col"
+        className="glass-panel w-full h-full flex flex-col"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-ink-300">Fullscreen preview</p>
-            <h3 className="text-lg font-semibold">{item.filename}</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition"
-          >
+        <div className="retro-titlebar flex items-center justify-between">
+          <span>Preview</span>
+          <button onClick={onClose} className="retro-button px-2 py-1 text-xs">
             Close
           </button>
         </div>
-        <div className="flex-1 mt-6 bg-ink-900/60 rounded-2xl flex items-center justify-center overflow-hidden">
-          {!data && <p className="text-ink-300">Decrypting...</p>}
+        <div className="p-4 flex-1">
+          <div className="retro-inset h-full flex items-center justify-center overflow-hidden">
+            {!data && <p className="text-ink-600">Decrypting...</p>}
           {data && item.kind === "image" && (
             <img
               src={`data:${item.mime};base64,${data}`}
@@ -44,8 +39,9 @@ export function FullscreenViewer({ item, data, onClose }: FullscreenViewerProps)
             />
           )}
           {data && item.kind === "document" && (
-            <p className="text-ink-200">Document preview not available yet.</p>
+            <p className="text-ink-600">Document preview not available yet.</p>
           )}
+          </div>
         </div>
       </motion.div>
     </div>

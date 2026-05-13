@@ -62,9 +62,26 @@ export async function decryptPreview(vaultId: string, itemId: string) {
   return invoke<string>("decrypt_preview", { vaultId, itemId });
 }
 
+export async function setItemFolder(
+  vaultId: string,
+  itemId: string,
+  folder: string | null
+) {
+  return invoke<void>("set_item_folder", { vaultId, itemId, folder });
+}
+
+export async function renameItem(
+  vaultId: string,
+  itemId: string,
+  filename: string
+) {
+  return invoke<void>("rename_item", { vaultId, itemId, filename });
+}
+
 export async function secureDeleteItem(vaultId: string, itemId: string) {
   return invoke<void>("secure_delete_item", { vaultId, itemId });
 }
+
 
 export async function encryptAndStore(params: {
   vaultId: string;

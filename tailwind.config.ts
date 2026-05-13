@@ -33,11 +33,10 @@ export default {
       },
       fontFamily: {
         sans: [
-          "Segoe UI Variable",
+          "Tahoma",
+          "MS Sans Serif",
           "Segoe UI",
-          "SF Pro Display",
-          "Helvetica Neue",
-          "Noto Sans",
+          "Arial",
           "sans-serif"
         ],
         mono: ["Cascadia Code", "SF Mono", "Menlo", "monospace"]

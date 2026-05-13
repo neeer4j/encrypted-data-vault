@@ -21,50 +21,53 @@ export function UnlockScreen({ busy, onCreate, onUnlock }: UnlockScreenProps) {
     }
   };
 
+
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-panel rounded-2xl p-10 max-w-md w-full glow-border"
+        className="glass-panel max-w-md w-full"
       >
-        <p className="text-xs uppercase tracking-[0.4em] text-ink-300">Personal Data Vault</p>
-        <h1 className="text-3xl font-semibold mt-4">{mode === "create" ? "Create vault" : "Unlock vault"}</h1>
-        <p className="text-ink-200 mt-3">
+        <div className="retro-titlebar">Personal Data Vault</div>
+        <div className="p-6">
+          <h1 className="text-xl font-semibold">{mode === "create" ? "Create vault" : "Unlock vault"}</h1>
+          <p className="text-ink-600 mt-2 text-sm">
           {mode === "create"
             ? "Initialize a new encrypted vault."
             : "Enter your password to decrypt locally."}
-        </p>
-        <div className="mt-8 space-y-4">
-          <input
-            value={vaultId}
-            onChange={(event) => setVaultId(event.target.value)}
-            placeholder="Vault ID"
-            className="w-full bg-ink-800/40 border border-white/10 rounded-xl px-4 py-3 outline-none"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password"
-            className="w-full bg-ink-800/40 border border-white/10 rounded-xl px-4 py-3 outline-none"
-          />
-          <button
-            onClick={handleSubmit}
-            disabled={busy}
-            className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
-          >
-            {busy ? "Working..." : mode === "create" ? "Create vault" : "Unlock"}
-          </button>
-        </div>
-        <div className="mt-6 text-sm text-ink-200 flex items-center justify-between">
-          <span>{mode === "create" ? "Already have a vault?" : "New here?"}</span>
-          <button
-            onClick={() => setMode(mode === "create" ? "unlock" : "create")}
-            className="text-ink-50"
-          >
-            {mode === "create" ? "Unlock" : "Create"}
-          </button>
+          </p>
+          <div className="mt-6 space-y-3">
+            <input
+              value={vaultId}
+              onChange={(event) => setVaultId(event.target.value)}
+              placeholder="Vault ID"
+              className="w-full retro-input px-3 py-2 outline-none"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Password"
+              className="w-full retro-input px-3 py-2 outline-none"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={busy}
+              className="w-full retro-button px-3 py-2 text-sm disabled:opacity-60"
+            >
+              {busy ? "Working..." : mode === "create" ? "Create vault" : "Unlock"}
+            </button>
+          </div>
+          <div className="mt-5 text-xs text-ink-600 flex items-center justify-between">
+            <span>{mode === "create" ? "Already have a vault?" : "New here?"}</span>
+            <button
+              onClick={() => setMode(mode === "create" ? "unlock" : "create")}
+              className="retro-button px-2 py-1 text-xs"
+            >
+              {mode === "create" ? "Unlock" : "Create"}
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>

@@ -15,6 +15,8 @@ use crate::db::{
     now_iso,
     set_folder_hidden as db_set_folder_hidden,
     set_folder_locked as db_set_folder_locked,
+    update_item_folder,
+    update_item_name,
     upsert_folder
 };
 use crate::errors::VaultError;
@@ -328,6 +330,42 @@ fn decrypt_preview(app: tauri::AppHandle, vault_id: String, item_id: String) -> 
     Ok(general_purpose::STANDARD.encode(plaintext))
 }
 
+#[tauri::command]
+fn set_item_folder(
+    app: tauri::AppHandle,
+    vault_id: String,
+    item_id: String,
+    folder: Option<String>
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch.to_string());
+    }
+    update_item_folder(&paths.db_path, &item_id, folder).map_err(to_invoke_error)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_item(
+    app: tauri::AppHandle,
+    vault_id: String,
+    item_id: String,
+    filename: String
+) -> CommandResult<()> {
+    let paths = vault_paths(&app, &vault_id).map_err(to_invoke_error)?;
+    let state = app.state::<AppState>();
+    let session = state.session.lock().unwrap();
+    let state = session.as_ref().ok_or(VaultError::NotUnlocked).map_err(to_invoke_error)?;
+    if state.vault_id != vault_id {
+        return Err(VaultError::VaultMismatch.to_string());
+    }
+    update_item_name(&paths.db_path, &item_id, &filename).map_err(to_invoke_error)?;
+    Ok(())
+}
+
 fn secure_delete_file(path: &std::path::Path) -> Result<(), VaultError> {
     if !path.exists() {
         return Ok(());
@@ -364,6 +402,7 @@ fn secure_delete_item(app: tauri::AppHandle, vault_id: String, item_id: String) 
     Ok(())
 }
 
+
 fn main() {
     tauri::Builder::default()
         .manage(AppState { session: std::sync::Mutex::new(None) })
@@ -383,7 +422,9 @@ fn main() {
             unlock_folder,
             search_items,
             decrypt_preview,
-            secure_delete_item
+            secure_delete_item,
+            set_item_folder,
+            rename_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

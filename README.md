@@ -41,6 +41,7 @@ Private, offline-first encrypted vault for files and notes. Everything is encryp
 ## Development tips
 - Unlock to access the dashboard.
 - Drag and drop files into the vault area to encrypt and store.
+- Use the Upload button in the top bar to add files.
 - Notes are stored encrypted like other items.
 - Use folders to group files, and lock them for extra protection.
 - Click a media card to open a fullscreen preview.

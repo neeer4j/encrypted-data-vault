@@ -5,13 +5,13 @@ interface SearchBarProps {
 
 export function SearchBar({ value, onChange }: SearchBarProps) {
   return (
-    <div className="glass-panel rounded-full px-4 py-2 w-80 flex items-center gap-3">
-      <span className="text-ink-200">Search</span>
+    <div className="retro-inset px-3 py-1 w-72 flex items-center gap-2">
+      <span className="text-xs text-ink-600">Find</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Search notes, files, tags"
-        className="bg-transparent border-0 outline-none text-sm text-white w-full"
+        className="bg-transparent border-0 outline-none text-sm w-full"
       />
     </div>
   );

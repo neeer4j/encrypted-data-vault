@@ -7,7 +7,7 @@ export function TagPills({ tags }: TagPillsProps) {
   return (
     <div className="flex flex-wrap gap-2">
       {tags.map((tag) => (
-        <span key={tag} className="text-xs px-2 py-1 rounded-full bg-white/10 text-ink-100">
+        <span key={tag} className="text-xs px-2 py-1 retro-chip">
           {tag}
         </span>
       ))}

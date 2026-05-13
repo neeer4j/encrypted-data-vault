@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useVault } from "./hooks/useVault";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { GalleryGrid } from "./components/GalleryGrid";
 import { FullscreenViewer } from "./components/FullscreenViewer";
+import { ExplorerPanel } from "./components/ExplorerPanel";
 import { NotesPanel } from "./components/NotesPanel";
+import { DashboardPanel } from "./components/DashboardPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -25,6 +27,8 @@ export default function App() {
     addFiles,
     addNote,
     deleteItem,
+    moveItem,
+    renameVaultItem,
     createVaultFolder,
     toggleFolderHidden,
     toggleFolderLocked,
@@ -39,6 +43,7 @@ export default function App() {
   const [showHidden, setShowHidden] = useState(false);
   const [viewerItem, setViewerItem] = useState<VaultItem | null>(null);
   const [viewerData, setViewerData] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useHotkeys({
     "mod+k": () => setQuery(""),
@@ -102,6 +107,11 @@ export default function App() {
     }
   };
 
+  const handleSelectFolder = (name: string | null) => {
+    setActiveFolder(name);
+    setActiveView("drive");
+  };
+
   const visibleFolders = useMemo(
     () => (showHidden ? folders : folders.filter((folder) => !folder.hidden)),
     [folders, showHidden]
@@ -132,9 +142,28 @@ export default function App() {
     setFiltered(next);
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length) {
+      await addFiles(files, activeFolder, []);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   if (!unlocked) {
     return <UnlockScreen busy={busy} onCreate={create} onUnlock={unlock} />;
   }
+
+  const handleCreateFolder = async (name: string) => {
+    if (!name.trim()) return;
+    await createVaultFolder(name.trim(), false, false);
+  };
 
   return (
     <div
@@ -142,6 +171,13 @@ export default function App() {
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileSelection}
+      />
       <div className="grid grid-cols-[260px_1fr] gap-6 min-h-[calc(100vh-48px)]">
         <Sidebar
           active={activeView}
@@ -150,10 +186,15 @@ export default function App() {
           folders={visibleFolders}
           activeFolder={activeFolder}
           unlockedFolders={unlockedFolders}
-          onSelectFolder={setActiveFolder}
+          onSelectFolder={handleSelectFolder}
         />
         <main className="flex flex-col gap-6">
-          <TopBar query={query} onQueryChange={handleSearch} />
+          <TopBar
+            query={query}
+            onQueryChange={handleSearch}
+            onUploadClick={handleUploadClick}
+            activeFolderLabel={activeFolder ? `Folder: ${activeFolder}` : "Vault Drive"}
+          />
           <motion.div
             key={activeView}
             initial={{ opacity: 0, y: 20 }}
@@ -162,28 +203,30 @@ export default function App() {
             className="flex-1"
           >
             {activeView === "dashboard" && (
+              <DashboardPanel />
+            )}
+            {activeView === "drive" && (
               <div className="space-y-6">
                 {activeFolderLocked ? (
                   <EmptyState
                     title="Folder locked"
                     description="Unlock this folder with your vault password to view its contents."
                   />
-                ) : visibleItems.length === 0 ? (
-                  <EmptyState
-                    title="Drop files to encrypt"
-                    description="Drag images, videos, documents, or create notes. Everything is encrypted before it touches disk."
-                  />
                 ) : (
-                  <GalleryGrid
-                    items={visibleItems.slice(0, 6)}
-                    onDelete={deleteItem}
-                    onOpen={handleOpenItem}
+                  <ExplorerPanel
+                    folders={visibleFolders}
+                    items={visibleItems}
+                    activeFolder={activeFolder}
+                    onSelectFolder={handleSelectFolder}
+                    onCreateFolder={handleCreateFolder}
+                    onMoveItem={moveItem}
+                    onRenameItem={renameVaultItem}
                   />
                 )}
                 {activeFolderLocked && activeFolder && (
                   <button
                     onClick={() => handleUnlockFolder(activeFolder)}
-                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition"
+                    className="retro-button px-3 py-2 text-sm"
                   >
                     Unlock folder
                   </button>
@@ -192,14 +235,20 @@ export default function App() {
             )}
             {activeView === "gallery" && (
               <div className="space-y-6">
+                {activeFolder === null && (
+                  <EmptyState
+                    title="Select a folder"
+                    description="Choose a folder from Vault Drive to view media files, or switch to Dashboard for the full drive view."
+                  />
+                )}
                 {activeFolderLocked ? (
                   <EmptyState
                     title="Folder locked"
                     description="Unlock this folder with your vault password to view its contents."
                   />
-                ) : mediaItems.length === 0 ? (
+                ) : activeFolder === null ? null : mediaItems.length === 0 ? (
                   <EmptyState
-                    title="Your gallery is empty"
+                    title="No media yet"
                     description="Upload images, videos, or documents. Previews are decrypted in memory only."
                   />
                 ) : (
@@ -220,7 +269,12 @@ export default function App() {
               </div>
             )}
             {activeView === "notes" && (
-              activeFolderLocked ? (
+              activeFolder === null ? (
+                <EmptyState
+                  title="Select a folder"
+                  description="Choose a folder from Vault Drive to view notes, or switch to Dashboard for the full drive view."
+                />
+              ) : activeFolderLocked ? (
                 <EmptyState
                   title="Folder locked"
                   description="Unlock this folder with your vault password to view its contents."

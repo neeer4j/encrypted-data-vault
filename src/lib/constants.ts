@@ -1,5 +1,6 @@
 export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "drive", label: "Vault Drive" },
   { id: "gallery", label: "Media" },
   { id: "notes", label: "Notes" },
   { id: "settings", label: "Settings" }

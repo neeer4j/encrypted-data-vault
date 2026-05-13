@@ -11,8 +11,10 @@ import {
   listFolders,
   listItems,
   lockVault,
+  renameItem,
   setFolderHidden,
   setFolderLocked,
+  setItemFolder,
   secureDeleteItem,
   searchItems,
   touchActivity,
@@ -132,6 +134,22 @@ export function useVault() {
     setBusy(false);
   }, [refreshItems, vaultId]);
 
+  const moveItem = useCallback(async (itemId: string, folder: string | null) => {
+    if (!vaultId) return;
+    setBusy(true);
+    await setItemFolder(vaultId, itemId, folder);
+    await refreshItems();
+    setBusy(false);
+  }, [refreshItems, vaultId]);
+
+  const renameVaultItem = useCallback(async (itemId: string, filename: string) => {
+    if (!vaultId) return;
+    setBusy(true);
+    await renameItem(vaultId, itemId, filename);
+    await refreshItems();
+    setBusy(false);
+  }, [refreshItems, vaultId]);
+
   const createVaultFolder = useCallback(async (name: string, hidden: boolean, locked: boolean) => {
     if (!vaultId) return;
     setBusy(true);
@@ -231,6 +249,8 @@ export function useVault() {
     addFiles,
     addNote,
     deleteItem,
+    moveItem,
+    renameVaultItem,
     createVaultFolder,
     toggleFolderHidden,
     toggleFolderLocked,
@@ -254,6 +274,8 @@ export function useVault() {
     addFiles,
     addNote,
     deleteItem,
+    moveItem,
+    renameVaultItem,
     createVaultFolder,
     toggleFolderHidden,
     toggleFolderLocked,
